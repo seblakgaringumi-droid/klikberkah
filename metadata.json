@@ -1,0 +1,6 @@
+{
+  "name": "Toko Berkah",
+  "description": "Aplikasi belanja online Toko Berkah - pesan antar COD & ambil di toko dengan katalog produk sembako terintegrasi kasir POS dan WhatsApp",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
