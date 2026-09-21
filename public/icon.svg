@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="storeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#15803d" />
+      <stop offset="100%" stop-color="#047857" />
+    </linearGradient>
+    <linearGradient id="basketGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f59e0b" />
+      <stop offset="100%" stop-color="#d97706" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#storeGrad)" />
+  <!-- Store Roof / Canopy -->
+  <path d="M96 190 L256 100 L416 190 L400 230 C380 230 368 215 352 215 C336 215 324 230 304 230 C284 230 272 215 256 215 C240 215 228 230 208 230 C188 230 176 215 160 215 C144 215 132 230 112 230 Z" fill="#ffffff" opacity="0.95"/>
+  <path d="M120 230 L140 370 C143 392 161 410 183 410 L329 410 C351 410 369 392 372 370 L392 230 Z" fill="url(#basketGrad)"/>
+  <!-- Shopping Bag / Rice Grain details -->
+  <path d="M210 280 C210 250 302 250 302 280 L302 330 C302 360 210 360 210 330 Z" fill="#ffffff" opacity="0.9"/>
+  <!-- Heart / Leaf of Blessing (Berkah) -->
+  <path d="M256 265 C246 250 220 255 220 275 C220 295 256 318 256 318 C256 318 292 295 292 275 C292 255 266 250 256 265 Z" fill="#15803d"/>
+</svg>
