@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { QrCode, Copy, Check, ExternalLink, Download, Smartphone } from 'lucide-react';
 import { formatRupiah } from '../utils/formatters';
+import { SUPABASE_URL } from '../supabase';
 
-export const QRIS_STATIC_IMAGE_URL = 'https://kquxfvcbgogjpthhsseg.supabase.co/storage/v1/object/public/assets/qris.jpeg';
+export const QRIS_STATIC_IMAGE_URL = `${SUPABASE_URL}/storage/v1/object/public/assets/qris.jpeg`;
 
 interface QRISCardProps {
   amount: number;
