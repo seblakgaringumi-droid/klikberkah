@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { ExternalLink, Copy, Check } from 'lucide-react';
 import { formatRupiah } from '../utils/formatters';
+import { SUPABASE_URL } from '../supabase';
 
 // URL gambar QRIS statis Toko Berkah di Supabase Storage
-export const QrisStaticImage = 'https://kquxfvcbgogjpthhsseg.supabase.co/storage/v1/object/public/assets/qris.jpeg';
+export const QrisStaticImage = `${SUPABASE_URL}/storage/v1/object/public/assets/qris.jpeg`;
 
 export interface CheckoutPaymentProps {
   selectedPayment?: string;
