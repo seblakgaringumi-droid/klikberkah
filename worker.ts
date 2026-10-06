@@ -1,6 +1,41 @@
 export default {
   async fetch(request: Request, env: any): Promise<Response> {
     const url = new URL(request.url);
+
+    // Proxy route for Supabase VPS to prevent Mixed Content (HTTPS -> HTTP) blocking in browsers
+    if (url.pathname.startsWith('/supabase-vps')) {
+      const targetBase = (env.VITE_SUPABASE_URL || env.NEXT_PUBLIC_SUPABASE_URL || "http://202.155.14.124:8000").replace(/\/$/, "");
+      const targetPath = url.pathname.replace(/^\/supabase-vps/, '');
+      const targetUrl = `${targetBase}${targetPath}${url.search}`;
+
+      const proxyHeaders = new Headers(request.headers);
+      proxyHeaders.set('host', new URL(targetBase).host);
+
+      try {
+        const proxyRes = await fetch(targetUrl, {
+          method: request.method,
+          headers: proxyHeaders,
+          body: ['GET', 'HEAD'].includes(request.method) ? undefined : await request.blob(),
+        });
+
+        const resHeaders = new Headers(proxyRes.headers);
+        resHeaders.set('access-control-allow-origin', '*');
+        resHeaders.set('access-control-allow-headers', '*');
+        resHeaders.set('access-control-allow-methods', '*');
+
+        return new Response(proxyRes.body, {
+          status: proxyRes.status,
+          statusText: proxyRes.statusText,
+          headers: resHeaders,
+        });
+      } catch (err: any) {
+        return new Response(JSON.stringify({ error: err?.message || 'Proxy fetch failed' }), {
+          status: 502,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+    }
+
     const productId = url.searchParams.get("product");
     const userAgent = request.headers.get("user-agent") || "";
     const isBot = /facebookexternalhit|whatsapp|twitterbot|telegrambot|bingbot|googlebot|linkedinbot|slackbot|discordbot/i.test(userAgent);
@@ -16,8 +51,8 @@ export default {
           let html = await indexResponse.text();
 
           // Ambil data produk dari Supabase REST API
-          const supabaseUrl = (env.VITE_SUPABASE_URL || env.NEXT_PUBLIC_SUPABASE_URL || "http://202.155.14.124:8000").replace(/\/$/, "");
-          const supabaseKey = env.VITE_SUPABASE_ANON_KEY || env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJhbm9uIiwKICAgICJpc3MiOiAic3VwYWJhc2UtZGVtbyIsCiAgICAiaWF0IjogMTY0MTc2OTIwMCwKICAgICJleHAiOiAxNzk5NTM1NjAwCn0.dc_X5iR_VP_qT0zsiyj_I_OZ2T9FtRU2BBNWN8Bu4GE";
+          const supabaseUrl = (env.VITE_SUPABASE_URL || env.NEXT_PUBLIC_SUPABASE_URL || "https://bjogkxquvqgikypjpmkz.supabase.co").replace(/\/$/, "");
+          const supabaseKey = env.VITE_SUPABASE_ANON_KEY || env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJqb2dreHF1dnFnaWt5cGpwbWt6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA4NzkyMDgsImV4cCI6MjEwNjQ1NTIwOH0.RX8bmKXzG4vWAhw7c4TGxxuvRyXWYnYdwhIK5oMEg2s";
 
           const productRes = await fetch(`${supabaseUrl}/rest/v1/products?id=eq.${encodeURIComponent(productId)}&select=*`, {
             headers: {
