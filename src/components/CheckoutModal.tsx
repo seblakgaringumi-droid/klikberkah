@@ -145,10 +145,11 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       // Format items json for orders table
       const itemsJson = items.map((it) => ({
         product_id: it.product.id,
-        product_name: it.product.name,
-        unit: it.unit,
+        product_name: it.selectedVariant ? `${it.product.name} (${it.selectedVariant.name})` : it.product.name,
+        variant_name: it.selectedVariant?.name || null,
+        unit: it.selectedVariant ? it.selectedVariant.name : it.unit,
         quantity: it.quantity,
-        price: it.product.selling_price,
+        price: it.selectedVariant ? it.selectedVariant.price : it.product.selling_price,
         subtotal: it.subtotal,
       }));
 
@@ -712,12 +713,19 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               <span className="text-[11px] text-emerald-600 font-semibold">Toko Berkah</span>
             </div>
             <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1 divide-y divide-slate-100">
-              {items.map((it) => (
-                <div key={it.product.id} className="pt-1 flex justify-between text-slate-600 text-[11px]">
-                  <span className="truncate pr-2 font-medium">{it.product.name} ({formatQty(it.quantity, it.unit)})</span>
-                  <span className="font-mono font-bold text-slate-800 shrink-0">{formatRupiah(it.subtotal)}</span>
-                </div>
-              ))}
+              {items.map((it) => {
+                const key = it.id || (it.selectedVariant ? `${it.product.id}__${it.selectedVariant.name}` : it.product.id);
+                const variantLabel = it.selectedVariant ? ` [${it.selectedVariant.name}]` : '';
+                const qtyLabel = it.selectedVariant ? `${it.quantity}x` : formatQty(it.quantity, it.unit);
+                return (
+                  <div key={key} className="pt-1 flex justify-between text-slate-600 text-[11px]">
+                    <span className="truncate pr-2 font-medium">
+                      {it.product.name}{variantLabel} ({qtyLabel})
+                    </span>
+                    <span className="font-mono font-bold text-slate-800 shrink-0">{formatRupiah(it.subtotal)}</span>
+                  </div>
+                );
+              })}
             </div>
             <div className="flex justify-between font-bold text-sm text-slate-900 pt-1.5 border-t border-slate-200">
               <span>Total Tagihan:</span>
