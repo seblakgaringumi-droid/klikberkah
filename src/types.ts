@@ -1,3 +1,10 @@
+export interface ProductVariant {
+  name: string;
+  price: number;
+  weight?: number;
+  [key: string]: unknown;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -9,12 +16,15 @@ export interface Product {
   is_active: boolean;
   image_url?: string | null;
   unit: string;
-  variants_json?: unknown[];
+  variants_json?: ProductVariant[];
+  variants?: ProductVariant[];
   barcode?: string | null;
 }
 
 export interface CartItem {
+  id?: string;
   product: Product;
+  selectedVariant?: ProductVariant | null;
   quantity: number;
   subtotal: number;
   unit: string;
@@ -34,6 +44,7 @@ export type PaymentMethod =
 export interface OrderItemJson {
   product_id?: string;
   product_name: string;
+  variant_name?: string | null;
   unit: string;
   quantity: number;
   price?: number;
