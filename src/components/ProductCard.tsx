@@ -1,63 +1,68 @@
 import React, { useState } from 'react';
-import { Product, CartItem } from '../types';
-import { Plus, Minus, Check, AlertCircle, ShoppingBag } from 'lucide-react';
-import { formatRupiah, formatStock, formatQty } from '../utils/formatters';
-import { isWeightVariantProduct, calculateItemSubtotal, getProductWeightVariants, isBawangProduct } from '../utils/weightVariants';
+import { Product, CartItem, ProductVariant } from '../types';
+import { Plus, Minus } from 'lucide-react';
+import { formatRupiah, formatQty } from '../utils/formatters';
+import { getProductVariants, formatVariantSublabel } from '../utils/weightVariants';
 
 interface ProductCardProps {
   product: Product;
+  cartItems?: CartItem[];
   cartItem?: CartItem;
-  onAddToCart: (product: Product, quantity?: number) => void;
-  onUpdateQuantity: (productId: string, newQty: number) => void;
+  onAddToCart: (product: Product, quantity?: number, variant?: ProductVariant | null) => void;
+  onUpdateQuantity: (cartKey: string, newQty: number) => void;
   onViewDetail?: (product: Product) => void;
 }
 
 export const ProductCard: React.FC<ProductCardProps> = ({
   product,
+  cartItems = [],
   cartItem,
   onAddToCart,
   onUpdateQuantity,
   onViewDetail,
 }) => {
   const [imageError, setImageError] = useState(false);
-  const isWeight = isWeightVariantProduct(product);
-  const variants = getProductWeightVariants(product);
-  const isBawang = isBawangProduct(product);
+  const variants = getProductVariants(product);
+  const hasVariants = variants.length > 0;
 
-  // Default variant selection: 0.1 for Bawang (100 gr), 0.25 for other weight products, or first available variant
-  const initialVariant = variants.length > 0 ? variants[0].value : 1;
-  const [selectedVariant, setSelectedVariant] = useState<number>(initialVariant);
+  // Selected variant state on card
+  const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(
+    () => (variants.length > 0 ? variants[0] : null)
+  );
 
   const stock = Number(product.stock_kg) || 0;
   const isOutOfStock = stock <= 0;
-  const isLowStock = stock > 0 && stock <= (product.min_stock || 3);
-  const currentCartQty = cartItem?.quantity || 0;
 
-  // Step increment: 0.1 for bawang, 0.25 for other weight items, 1 for pcs/beras
-  const step = isBawang ? 0.1 : isWeight ? 0.25 : 1;
+  // Find if the currently selected variant (or base product) is in cart
+  const currentVariantCartItem = cartItems.find((it) => {
+    if (it.product.id !== product.id) return false;
+    if (selectedVariant) {
+      return it.selectedVariant?.name === selectedVariant.name;
+    }
+    return !it.selectedVariant;
+  }) || (cartItem && cartItem.product.id === product.id ? cartItem : undefined);
+
+  const currentCartQty = currentVariantCartItem?.quantity || 0;
+  const currentCartKey = currentVariantCartItem?.id || (selectedVariant ? `${product.id}__${selectedVariant.name}` : product.id);
+
+  const currentPrice = selectedVariant ? selectedVariant.price : product.selling_price;
 
   const handleIncrement = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (isOutOfStock) return;
-    const rawNext = currentCartQty + step;
-    const next = Math.round(rawNext * 100) / 100;
-    if (next <= stock) {
-      if (currentCartQty === 0) {
-        onAddToCart(product, isWeight ? selectedVariant : 1);
-      } else {
-        onUpdateQuantity(product.id, next);
-      }
+    if (currentCartQty === 0) {
+      onAddToCart(product, 1, selectedVariant);
+    } else {
+      onUpdateQuantity(currentCartKey, currentCartQty + 1);
     }
   };
 
   const handleDecrement = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const rawNext = currentCartQty - step;
-    const next = Math.round(rawNext * 100) / 100;
-    if (next <= 0) {
-      onUpdateQuantity(product.id, 0);
+    if (currentCartQty <= 1) {
+      onUpdateQuantity(currentCartKey, 0);
     } else {
-      onUpdateQuantity(product.id, next);
+      onUpdateQuantity(currentCartKey, currentCartQty - 1);
     }
   };
 
@@ -78,7 +83,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     <div
       id={`product-card-${product.id}`}
       onClick={() => onViewDetail?.(product)}
-      className={`bg-white rounded-2xl p-3 border border-slate-100 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden flex flex-col justify-between cursor-pointer ${
+      className={`bg-white rounded-2xl p-3 border border-slate-100 shadow-xs hover:shadow-md transition-shadow relative overflow-hidden flex flex-col justify-between cursor-pointer ${
         isOutOfStock 
           ? 'bg-slate-50/80' 
           : currentCartQty > 0 
@@ -100,50 +105,32 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             }`}
           />
         ) : (
-          <div className={`w-full h-full flex flex-col items-center justify-center p-3 ${theme.bg}`}>
-            <span className={`text-3xl sm:text-4xl mb-1 filter drop-shadow-xs ${isOutOfStock ? 'grayscale opacity-50' : ''}`}>
-              {theme.icon}
-            </span>
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider text-center">
+          <div className="flex flex-col items-center justify-center p-4 text-center">
+            <span className="text-4xl mb-1">{theme.icon}</span>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
               {product.category || 'Toko Berkah'}
             </span>
           </div>
         )}
 
-        {/* Stock Badge - Vibrant Palette Pill */}
-        <div className="absolute top-2 left-2 z-20">
-          {isOutOfStock ? (
-            <span className="bg-red-600 text-white text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider shadow-xs border border-red-400">
-              Habis
-            </span>
-          ) : isLowStock ? (
-            <span className="bg-amber-100 text-amber-800 text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider shadow-xs">
-              Sisa {formatStock(stock, product.unit)}
-            </span>
-          ) : (
-            <span className="bg-emerald-100 text-emerald-700 text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider shadow-xs">
-              Tersedia
+        {/* Category Pill Tag */}
+        <div className="absolute top-2 left-2 flex flex-col gap-1 items-start">
+          <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-white/95 text-emerald-950 backdrop-blur-xs shadow-xs border border-slate-100">
+            {product.category || 'Sembako'}
+          </span>
+          {hasVariants && (
+            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-700 text-white shadow-xs">
+              {variants.length} Varian
             </span>
           )}
         </div>
 
-        {/* Transparent Out-of-Stock Overlay (Requirement 1.a) */}
+        {/* Out of Stock Overlay */}
         {isOutOfStock && (
-          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-[1.5px] z-10 flex flex-col items-center justify-center p-2 rounded-xl text-center select-none">
-            <span className="bg-red-600 text-white text-[10px] sm:text-xs font-black px-2.5 py-1 rounded-full uppercase tracking-wider shadow-md border border-red-300">
-              STOK HABIS
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-[2px] flex items-center justify-center p-2 text-center">
+            <span className="bg-red-600 text-white text-[10px] sm:text-xs font-black px-2.5 py-1 rounded-full uppercase tracking-wider shadow-sm">
+              Habis
             </span>
-            <span className="text-[9px] sm:text-[10px] text-white/95 font-medium mt-1">
-              Tidak Tersedia
-            </span>
-          </div>
-        )}
-
-        {/* In-cart indicator ribbon */}
-        {currentCartQty > 0 && !isOutOfStock && (
-          <div className="absolute bottom-2 left-2 bg-yellow-400 text-emerald-950 px-2 py-0.5 rounded-md text-[10px] font-black flex items-center gap-1 shadow-xs z-20">
-            <Check className="w-3 h-3" />
-            <span>{formatQty(currentCartQty, product.unit)} di Keranjang</span>
           </div>
         )}
       </div>
@@ -157,27 +144,30 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             {product.name}
           </h3>
           <p className="text-xs text-slate-400 mt-0.5 mb-1">
-            {product.unit ? (product.unit.toLowerCase() === 'kg' ? 'Kg' : product.unit) : 'pcs'}
+            {selectedVariant
+              ? `Varian: ${selectedVariant.name}`
+              : product.unit ? (product.unit.toLowerCase() === 'kg' ? 'Kg' : product.unit) : 'pcs'}
           </p>
 
-          {/* Weight Variant Selector for items like tepung, bawang, gula */}
-          {isWeight && !isOutOfStock && variants.length > 0 && (
+          {/* Kasir POS Variant Chips */}
+          {hasVariants && !isOutOfStock && (
             <div className="flex flex-wrap items-center gap-1 my-1" onClick={(e) => e.stopPropagation()}>
               {variants.map((v) => {
-                const isSelected = selectedVariant === v.value;
+                const isSelected = selectedVariant?.name === v.name;
+                const sublabel = formatVariantSublabel(v, product.unit);
                 return (
                   <button
-                    key={v.value}
+                    key={v.name}
                     type="button"
-                    onClick={() => setSelectedVariant(v.value)}
+                    onClick={() => setSelectedVariant(v)}
                     className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold transition border ${
                       isSelected
                         ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
                         : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
                     }`}
-                    title={`${v.label} (${v.sublabel})`}
+                    title={sublabel ? `${v.name} (${sublabel}) - ${formatRupiah(v.price)}` : `${v.name} - ${formatRupiah(v.price)}`}
                   >
-                    {v.label}
+                    {v.name}
                   </button>
                 );
               })}
@@ -189,18 +179,17 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
           <div>
             <div className={`text-sm sm:text-base font-black ${isOutOfStock ? 'text-slate-400 line-through' : 'text-emerald-600 font-mono'}`}>
-              {formatRupiah(isWeight ? calculateItemSubtotal(product, selectedVariant) : product.selling_price)}
+              {formatRupiah(currentPrice)}
             </div>
-            {isWeight && !isOutOfStock && (
-              <div className="text-[10px] text-slate-400 font-medium">
-                {selectedVariant === 1 
-                  ? `Rp ${product.selling_price.toLocaleString('id-ID')} / kg` 
-                  : `Varian ${variants.find(v => v.value === selectedVariant)?.label || `${selectedVariant} kg`}`}
+            {selectedVariant && !isOutOfStock && (
+              <div className="text-[10px] text-slate-500 font-medium truncate max-w-[110px]">
+                {selectedVariant.name}
+                {formatVariantSublabel(selectedVariant, product.unit) ? ` (${formatVariantSublabel(selectedVariant, product.unit)})` : ''}
               </div>
             )}
           </div>
 
-          {/* Action Button: [+ Tambah] or Stepper or Disabled Gray Button (Requirement 1.b & 1.c) */}
+          {/* Action Button: [+ Tambah] or Stepper or Disabled Gray Button */}
           <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
             {isOutOfStock ? (
               <button
@@ -222,19 +211,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                 >
                   <Minus className="w-3.5 h-3.5" />
                 </button>
-                <span className="min-w-[42px] px-1 text-center text-[11px] font-black text-emerald-950 font-mono">
-                  {formatQty(currentCartQty, product.unit)}
+                <span className="min-w-[36px] px-1 text-center text-[11px] font-black text-emerald-950 font-mono">
+                  {currentCartQty}
                 </span>
                 <button
                   id={`btn-inc-${product.id}`}
                   onClick={handleIncrement}
-                  disabled={currentCartQty >= stock}
                   aria-label="Tambah kuantitas"
-                  className={`w-7 h-7 flex items-center justify-center rounded-md transition active:scale-95 shadow-xs font-black text-xs ${
-                    currentCartQty >= stock
-                      ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                      : 'bg-yellow-400 text-emerald-900 hover:bg-yellow-300'
-                  }`}
+                  className="w-7 h-7 flex items-center justify-center rounded-md transition active:scale-95 shadow-xs font-black text-xs bg-yellow-400 text-emerald-900 hover:bg-yellow-300"
                 >
                   <Plus className="w-3.5 h-3.5" />
                 </button>
@@ -244,7 +228,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                 id={`btn-add-${product.id}`}
                 onClick={(e) => {
                   e.stopPropagation();
-                  onAddToCart(product, isWeight ? selectedVariant : 1);
+                  onAddToCart(product, 1, selectedVariant);
                 }}
                 className="bg-yellow-400 hover:bg-yellow-300 text-emerald-900 px-2.5 py-1.5 rounded-lg flex items-center gap-1 font-black text-xs hover:scale-105 active:scale-95 transition-all shadow-xs"
                 title="Tambah ke keranjang"
