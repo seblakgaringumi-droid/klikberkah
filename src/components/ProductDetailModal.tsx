@@ -1,20 +1,26 @@
 import React, { useState, useEffect } from 'react';
-import { Product, CartItem } from '../types';
-import { X, Plus, Minus, Check, ShoppingBag, AlertTriangle, Store, ShieldCheck, Sparkles, Share2, Copy, MessageCircle } from 'lucide-react';
+import { Product, CartItem, ProductVariant } from '../types';
+import { X, Plus, Minus, Check, AlertTriangle, Store, Share2, Copy, MessageCircle } from 'lucide-react';
 import { formatRupiah, formatStock, formatQty } from '../utils/formatters';
-import { isWeightVariantProduct, calculateItemSubtotal, getProductWeightVariants, isBawangProduct } from '../utils/weightVariants';
+import {
+  getProductVariants,
+  formatVariantSublabel,
+  calculateItemSubtotal,
+} from '../utils/weightVariants';
 
 interface ProductDetailModalProps {
   product: Product | null;
+  cartItems?: CartItem[];
   cartItem?: CartItem;
   isOpen: boolean;
   onClose: () => void;
-  onAddToCart: (product: Product, quantity?: number) => void;
-  onUpdateQuantity: (productId: string, newQty: number) => void;
+  onAddToCart: (product: Product, quantity?: number, variant?: ProductVariant | null) => void;
+  onUpdateQuantity: (cartKey: string, newQty: number) => void;
 }
 
 export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   product,
+  cartItems = [],
   cartItem,
   isOpen,
   onClose,
@@ -24,20 +30,21 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   const [imageError, setImageError] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [shareToast, setShareToast] = useState<string | null>(null);
-  const isWeight = isWeightVariantProduct(product);
-  const variants = getProductWeightVariants(product);
-  const isBawang = isBawangProduct(product);
+
+  const variants = product ? getProductVariants(product) : [];
+  const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(null);
   const [selectedQty, setSelectedQty] = useState(1);
 
-  // Set initial selectedQty depending on whether it is a weight product
+  // Set initial selected variant and quantity when product changes
   useEffect(() => {
     if (product) {
-      const pVariants = getProductWeightVariants(product);
+      const pVariants = getProductVariants(product);
       if (pVariants.length > 0) {
-        setSelectedQty(pVariants[0].value);
+        setSelectedVariant(pVariants[0]);
       } else {
-        setSelectedQty(1);
+        setSelectedVariant(null);
       }
+      setSelectedQty(1);
     }
   }, [product]);
 
@@ -51,15 +58,23 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
 
   const stock = Number(product.stock_kg) || 0;
   const isOutOfStock = stock <= 0;
-  const currentCartQty = cartItem?.quantity || 0;
 
-  // Step increment: 0.1 for bawang, 0.25 for weight products, 1 for pcs/beras
-  const step = isBawang ? 0.1 : isWeight ? 0.25 : 1;
+  // Determine current quantity in cart for the selected variant
+  const currentVariantCartItem = cartItems.find((it) => {
+    if (it.product.id !== product.id) return false;
+    if (selectedVariant) {
+      return it.selectedVariant?.name === selectedVariant.name;
+    }
+    return !it.selectedVariant;
+  }) || (cartItem && cartItem.product.id === product.id ? cartItem : undefined);
+
+  const currentCartQty = currentVariantCartItem?.quantity || 0;
+  const currentCartKey = currentVariantCartItem?.id || (selectedVariant ? `${product.id}__${selectedVariant.name}` : product.id);
 
   const handleAdd = () => {
     if (isOutOfStock) return;
-    const qtyToAdd = selectedQty > 0 ? selectedQty : step;
-    onAddToCart(product, qtyToAdd);
+    const qtyToAdd = selectedQty > 0 ? selectedQty : 1;
+    onAddToCart(product, qtyToAdd, selectedVariant);
     onClose();
   };
 
@@ -71,7 +86,9 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
 
   const handleNativeShare = async () => {
     const shareUrl = getProductShareUrl();
-    const shareText = `*${product.name}*\nHarga: ${formatRupiah(product.selling_price)} / ${product.unit ? product.unit.toUpperCase() : 'PCS'}\n\nYuk beli di Toko Berkah! Klik link di bawah:\n${shareUrl}`;
+    const currentPrice = selectedVariant ? selectedVariant.price : product.selling_price;
+    const unitLabel = selectedVariant ? selectedVariant.name : (product.unit || 'PCS');
+    const shareText = `*${product.name}*\nHarga: ${formatRupiah(currentPrice)} / ${unitLabel}\n\nYuk beli di Toko Berkah! Klik link di bawah:\n${shareUrl}`;
 
     if (navigator.share) {
       try {
@@ -86,7 +103,6 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
       }
     }
 
-    // Fallback: Copy link directly
     copyShareLink();
   };
 
@@ -117,10 +133,15 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
 
   const shareViaWhatsApp = () => {
     const shareUrl = getProductShareUrl();
-    const text = `*${product.name}*\nHarga: *${formatRupiah(product.selling_price)}* / ${product.unit || 'pcs'}\n\nLihat & pesan langsung di Toko Berkah:\n${shareUrl}`;
+    const currentPrice = selectedVariant ? selectedVariant.price : product.selling_price;
+    const unitLabel = selectedVariant ? selectedVariant.name : (product.unit || 'pcs');
+    const text = `*${product.name}*\nHarga: *${formatRupiah(currentPrice)}* / ${unitLabel}\n\nLihat & pesan langsung di Toko Berkah:\n${shareUrl}`;
     const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
     window.open(waUrl, '_blank', 'noopener,noreferrer');
   };
+
+  const currentPrice = selectedVariant ? selectedVariant.price : product.selling_price;
+  const subtotalPrice = calculateItemSubtotal(product, selectedQty, selectedVariant);
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
@@ -202,10 +223,12 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
 
             <div className="flex items-center justify-between">
               <div className="text-2xl font-black font-mono text-emerald-600">
-                {formatRupiah(product.selling_price)}
+                {formatRupiah(currentPrice)}
               </div>
-              <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg">
-                Satuan: {product.unit ? product.unit.toUpperCase() : 'PCS'}
+              <span className="text-xs font-bold text-slate-600 bg-slate-100 px-2.5 py-1 rounded-lg">
+                {selectedVariant 
+                  ? `Varian: ${selectedVariant.name}` 
+                  : `Satuan: ${product.unit ? product.unit.toUpperCase() : 'PCS'}`}
               </span>
             </div>
           </div>
@@ -244,7 +267,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
             </div>
           </div>
 
-          {/* Stock Availability Alert (Requirement 1) */}
+          {/* Stock Availability Alert */}
           {isOutOfStock ? (
             <div className="p-3.5 bg-red-50 border border-red-200 rounded-2xl flex items-start gap-3 text-red-800">
               <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
@@ -269,60 +292,92 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
             </div>
           )}
 
-          {/* Weight Variants Selector for items like tepung, bawang, gula */}
-          {isWeight && !isOutOfStock && variants.length > 0 && (
-            <div className="space-y-2 pt-2 border-t border-slate-100">
+          {/* Variants Selector Sesuai Katalog Kasir */}
+          {variants.length > 0 && !isOutOfStock && (
+            <div className="space-y-2.5 pt-3 border-t border-slate-100">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-700">Pilih Varian Berat:</span>
-                <span className="text-[11px] text-emerald-600 font-semibold">
-                  {isBawang ? 'Tersedia 100 gr, 1/4 kg, 1/2 kg' : 'Tersedia 1/4 kg & 1/2 kg'}
+                <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                  <Store className="w-4 h-4 text-emerald-600" />
+                  Pilih Varian (Katalog Kasir):
+                </span>
+                <span className="text-[11px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full font-bold">
+                  {variants.length} Varian
                 </span>
               </div>
-              <div className={`grid gap-2 ${variants.length === 4 ? 'grid-cols-4' : 'grid-cols-3'}`}>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 {variants.map((v) => {
-                  const isSelected = Math.abs(selectedQty - v.value) < 0.01;
-                  const vPrice = calculateItemSubtotal(product, v.value);
+                  const isSelected = selectedVariant?.name === v.name;
+                  const sublabel = formatVariantSublabel(v, product.unit);
                   return (
                     <button
-                      key={v.value}
+                      key={v.name}
                       type="button"
-                      onClick={() => setSelectedQty(v.value)}
-                      className={`p-2 rounded-xl border text-center transition flex flex-col items-center justify-center gap-0.5 ${
+                      onClick={() => {
+                        setSelectedVariant(v);
+                        setSelectedQty(1);
+                      }}
+                      className={`p-2.5 rounded-xl border text-left transition flex flex-col justify-between gap-1 relative ${
                         isSelected
                           ? 'bg-emerald-50 border-emerald-500 text-emerald-950 ring-2 ring-emerald-500/20 shadow-xs'
-                          : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                          : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300'
                       }`}
                     >
-                      <span className="font-black text-xs">{v.label}</span>
-                      <span className="text-[9px] text-slate-500">{v.sublabel}</span>
-                      <span className="text-[10px] font-black font-mono text-emerald-600 mt-0.5">
-                        {formatRupiah(vPrice)}
+                      <div className="flex items-start justify-between gap-1">
+                        <span className="font-black text-xs leading-tight">{v.name}</span>
+                        {isSelected && (
+                          <span className="w-4 h-4 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                            <Check className="w-2.5 h-2.5 stroke-[3]" />
+                          </span>
+                        )}
+                      </div>
+                      {sublabel && (
+                        <span className="text-[10px] text-slate-500 font-medium">
+                          {sublabel}
+                        </span>
+                      )}
+                      <span className="text-xs font-black font-mono text-emerald-600 mt-1">
+                        {formatRupiah(v.price)}
                       </span>
                     </button>
                   );
                 })}
               </div>
+
+              {/* Selected Variant Summary Card */}
+              {selectedVariant && (
+                <div className="p-2.5 bg-emerald-50/70 border border-emerald-200/80 rounded-xl flex items-center justify-between text-xs">
+                  <span className="text-emerald-900 font-medium">
+                    Varian Dipilih: <strong className="font-bold">{selectedVariant.name}</strong>{' '}
+                    {formatVariantSublabel(selectedVariant, product.unit) ? `(${formatVariantSublabel(selectedVariant, product.unit)})` : ''}
+                  </span>
+                  <span className="font-black font-mono text-emerald-700">
+                    {formatRupiah(selectedVariant.price)}
+                  </span>
+                </div>
+              )}
             </div>
           )}
 
           {/* Quantity selector if in stock */}
           {!isOutOfStock && currentCartQty === 0 && (
             <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-700">Jumlah Pembelian:</span>
+              <span className="text-xs font-bold text-slate-700">
+                {selectedVariant ? `Jumlah (${selectedVariant.name}):` : 'Jumlah Pembelian:'}
+              </span>
               <div className="flex items-center bg-slate-100 border border-slate-200 rounded-xl p-1">
                 <button
-                  onClick={() => setSelectedQty(Math.max(step, Math.round((selectedQty - step) * 100) / 100))}
-                  disabled={selectedQty <= step}
+                  onClick={() => setSelectedQty(Math.max(1, selectedQty - 1))}
+                  disabled={selectedQty <= 1}
                   className="w-8 h-8 rounded-lg bg-white text-slate-700 flex items-center justify-center font-bold text-sm shadow-xs disabled:opacity-40"
                 >
                   <Minus className="w-4 h-4" />
                 </button>
                 <span className="min-w-[50px] px-1 text-center font-black text-sm text-slate-900 font-mono">
-                  {formatQty(selectedQty, product.unit)}
+                  {selectedQty} {selectedVariant ? '' : (product.unit || 'pcs')}
                 </span>
                 <button
-                  onClick={() => setSelectedQty(Math.min(stock, Math.round((selectedQty + step) * 100) / 100))}
-                  disabled={selectedQty >= stock}
+                  onClick={() => setSelectedQty(selectedQty + 1)}
                   className="w-8 h-8 rounded-lg bg-yellow-400 text-emerald-950 flex items-center justify-center font-bold text-sm shadow-xs disabled:opacity-40"
                 >
                   <Plus className="w-4 h-4" />
@@ -331,27 +386,28 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
             </div>
           )}
 
-          {/* If already in cart */}
+          {/* If already in cart for this variant */}
           {currentCartQty > 0 && !isOutOfStock && (
             <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-2xl flex items-center justify-between text-xs">
               <div className="flex items-center gap-2 text-emerald-950 font-bold">
                 <Check className="w-4 h-4 text-emerald-700" />
-                <span>Sudah ada di keranjang:</span>
+                <span>
+                  Sudah di keranjang {selectedVariant ? `(${selectedVariant.name})` : ''}:
+                </span>
               </div>
               <div className="flex items-center gap-1.5">
                 <button
-                  onClick={() => onUpdateQuantity(product.id, Math.round((currentCartQty - step) * 100) / 100)}
-                  className="w-7 h-7 bg-white rounded-lg border border-yellow-300 flex items-center justify-center font-bold"
+                  onClick={() => onUpdateQuantity(currentCartKey, currentCartQty - 1)}
+                  className="w-7 h-7 bg-white rounded-lg border border-yellow-300 flex items-center justify-center font-bold text-slate-800"
                 >
                   <Minus className="w-3.5 h-3.5" />
                 </button>
-                <span className="font-mono font-black text-xs px-1.5">
-                  {formatQty(currentCartQty, product.unit)}
+                <span className="font-mono font-black text-xs px-1.5 text-emerald-950">
+                  {currentCartQty} {selectedVariant ? '' : (product.unit || 'pcs')}
                 </span>
                 <button
-                  onClick={() => onUpdateQuantity(product.id, Math.min(stock, Math.round((currentCartQty + step) * 100) / 100))}
-                  disabled={currentCartQty >= stock}
-                  className="w-7 h-7 bg-yellow-400 text-emerald-950 rounded-lg flex items-center justify-center font-bold disabled:opacity-40"
+                  onClick={() => onUpdateQuantity(currentCartKey, currentCartQty + 1)}
+                  className="w-7 h-7 bg-yellow-400 text-emerald-950 rounded-lg flex items-center justify-center font-bold"
                 >
                   <Plus className="w-3.5 h-3.5" />
                 </button>
@@ -382,7 +438,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                 className="w-full py-3.5 px-4 rounded-xl bg-yellow-400 hover:bg-yellow-300 text-emerald-950 font-black text-xs sm:text-sm shadow-md transition flex items-center justify-center gap-2 active:scale-95"
               >
                 <Plus className="w-4 h-4 stroke-[3]" />
-                <span>+ TAMBAH KE KERANJANG ({formatRupiah(calculateItemSubtotal(product, selectedQty))})</span>
+                <span>+ TAMBAH KE KERANJANG ({formatRupiah(subtotalPrice)})</span>
               </button>
             )}
           </div>
